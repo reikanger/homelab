@@ -31,7 +31,7 @@
         owner: root
         group: root
         mode: '0644'
-      notify: Restart Samba
+        #notify: Restart Samba services
 
     - name: Create Samba share directories
       file:
@@ -58,7 +58,6 @@
       ansible.builtin.command: restorecon -irv {{ item.path }}
       loop: "{{ samba_shares }}"
 
-  handlers:
     - name: Restart Samba services
       systemd:
         name: "{{ item }}"
