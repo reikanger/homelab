@@ -1,0 +1,15 @@
+---
+- name: Fix SELinux context on all Samba shared files and folders
+  hosts: prod
+  become: yes
+
+  tasks:
+    - name: Set SELinux context for files in /data/shared
+      community.general.sefcontext:
+        target: /data/shared(/.*)?
+        setype: samba_share_t
+        state: present
+        reload: yes
+
+    - name: Relabel existing files in /data/shared
+      command: restorecon -F -R /data/shared

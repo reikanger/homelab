@@ -1,0 +1,58 @@
+---
+- name: Create and manage Caddy Podman container
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "caddy"
+    container_image: "localhost/caddy-cloudflare:latest"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create a Podman volume for Caddy data
+      podman_volume:
+        name: caddy_data
+
+    - name: Create a Podman volume for Caddy config
+      podman_volume:
+        name: caddy_config
+
+    - name: Create a Podman volume for Caddy site
+      podman_volume:
+        name: caddy_site
+
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        state: started
+        ports:
+          - "80:80"
+          - "443:443"
+        volumes:
+          - "/srv/caddy/Caddyfile:/etc/caddy/Caddyfile:Z"
+          - "caddy_config:/config:Z" 
+          - "caddy_data:/data:Z"
+          - "caddy_site:/srv:Z"
+
+    - name: Ensure Podman container is running
+      podman_container:
+        name: "{{ container_name }}"
+        state: started
+
+    - name: Generate systemd unit file for container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true

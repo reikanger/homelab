@@ -1,0 +1,46 @@
+---
+- name: Create and manage Kavita Podman containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "kavita"
+    container_image: "docker.io/jvmilazz0/kavita:latest"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create a Podman volume for Kavita config
+      podman_volume:
+        name: kavita_data
+
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        ports:
+          - "18889:5000"
+        volumes:
+          - "kavita_data:/kavita/config:Z"
+          - "/data/media/Books:/manga:z,ro"
+
+    - name: Generate systemd unit file for Kavita container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure Kavita container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

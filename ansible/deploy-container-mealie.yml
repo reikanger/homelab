@@ -1,0 +1,49 @@
+---
+- name: Create and manage Mealie Podman container
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "mealie"
+    container_image: "ghcr.io/mealie-recipes/mealie:latest"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create a Podman volume for mealie data
+      podman_volume:
+        name: lubelog_data
+
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        env:
+          TZ: "America/Chicago"
+          MAX_WORKERS: "1"
+          WEB_CONCURRENCY: "1"
+          BASE_URL: "https://recipes.reika.io"
+        ports:
+          - "10084:9000"
+        volumes:
+          - "mealie_data:/app/data:Z"
+
+    - name: Generate systemd unit file for Mealie container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure lubelog container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true

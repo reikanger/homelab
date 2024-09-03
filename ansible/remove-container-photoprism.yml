@@ -1,0 +1,27 @@
+---
+- name: Remove Podman container and its systemd service
+  hosts: prod  # Replace with your target server(s)
+
+  collections:
+    - containers.podman
+
+  tasks:
+    - name: Remove systemd service file (if it exists)
+      file:
+        path: /home/reika/.config/systemd/user/container-photoprism-app.service
+        state: absent
+
+    - name: Remove systemd service file (if it exists)
+      file:
+        path: /home/reika/.config/systemd/user/container-photoprism-db.service
+        state: absent
+
+    - name: Remove systemd service file (if it exists)
+      file:
+        path: /home/reika/.config/systemd/user/pod-photoprism.service
+        state: absent
+
+    - name: Reload systemd
+      systemd:
+        scope: user
+        daemon_reload: true

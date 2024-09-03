@@ -1,0 +1,299 @@
+### Physical Servers ###
+
+macragge.reika.io {
+	reverse_proxy 192.168.1.5:9090 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+
+### Containers ###
+
+ansible.reika.io {
+	reverse_proxy 192.168.1.5:13002
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+audiobooks.reika.io {
+	reverse_proxy 192.168.1.5:10081
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+cloudbeaver.reika.io {
+	reverse_proxy 192.168.1.5:28978
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+coder.reika.io {
+	reverse_proxy 192.168.1.5:18005 {
+		transport http {
+			tls
+                        tls_insecure_skip_verify
+                }
+	}
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+cyberchef.reika.io {
+	reverse_proxy 192.168.1.5:18002
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+duplicati.reika.io {
+	reverse_proxy 192.168.1.5:18200
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+firefly.reika.io {
+	reverse_proxy 192.168.1.5:58080
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+handbrake.reika.io {
+	reverse_proxy 192.168.1.5:15800
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+homebox.reika.io {
+	reverse_proxy 192.168.1.5:7745
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+jackett.reika.io {
+	reverse_proxy 192.168.1.5:9117
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+jupyter.reika.io {
+	reverse_proxy 192.168.1.5:13888
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+jupyter-gpu.reika.io {
+	reverse_proxy 192.168.1.5:33888
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+kavita.reika.io {
+	reverse_proxy 192.168.1.5:18889
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+lidarr.reika.io {
+	reverse_proxy 192.168.1.5:18686
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+lubelog.reika.io {
+	reverse_proxy 192.168.1.5:18089
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+mealie.reika.io {
+	reverse_proxy 192.168.1.5:10084
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+metube.reika.io {
+	reverse_proxy 192.168.1.5:28081
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+monica.reika.io {
+	reverse_proxy 192.168.1.5:10085
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+open-webui.reika.io {
+	reverse_proxy 192.168.1.5:13889
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+paperless.reika.io {
+	reverse_proxy 192.168.1.5:18003
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+photoprism.reika.io {
+	reverse_proxy 192.168.1.5:18004 {
+		transport http {
+			tls
+                        tls_insecure_skip_verify
+                }
+	}
+	tls {
+
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+pihole.reika.io {
+	reverse_proxy 192.168.1.5:3000
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+podcasts.reika.io {
+	reverse_proxy 192.168.1.5:18040
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+plex.reika.io {
+	reverse_proxy 192.168.1.5:32400
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+prowlarr.reika.io {
+	reverse_proxy 192.168.1.5:19696
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+pyspark.reika.io {
+	reverse_proxy 192.168.1.5:14888
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+radarr.reika.io {
+	reverse_proxy 192.168.1.5:17878
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+readarr.reika.io {
+	reverse_proxy 192.168.1.5:18787
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+rclone.reika.io {
+	reverse_proxy 192.168.1.5:5572
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+rundeck.reika.io {
+	reverse_proxy 192.168.1.5:14440
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+scrutiny.reika.io {
+	reverse_proxy 192.168.1.5:18085
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+sickchill.reika.io {
+	reverse_proxy 192.168.1.5:18081
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+sonarr.reika.io {
+	reverse_proxy 192.168.1.5:18989
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+speedtest.reika.io {
+	reverse_proxy 192.168.1.5:13001
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+tautulli.reika.io {
+	reverse_proxy 192.168.1.5:8181
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+transmission.reika.io {
+	reverse_proxy 192.168.1.5:9091
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+tubesync.reika.io {
+	reverse_proxy 192.168.1.5:14848
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+wallabag.reika.io {
+	reverse_proxy 192.168.1.5:9000
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}
+
+whoami.reika.io {
+	reverse_proxy 192.168.1.5:10088
+	tls {
+		dns cloudflare {{ cloudflare_api_key }}
+	}
+}

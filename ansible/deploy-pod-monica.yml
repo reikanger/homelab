@@ -1,0 +1,105 @@
+---
+- name: Create and manage Monica Podman pod and containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "monica-crm"
+    container_image: "docker.io/monica:latest"
+    user: "reika"
+    user_group: "reika"
+    monica_app_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          38623562663338373062343361643232653036616336663262363165623131653335643662323036
+          3032613163393632393035616361613239373036323836360a616166376666613138363036333137
+          30313335623637333337353839643131373835613536633165663135353633663830636532613966
+          3362643138336535330a663364336631316137326562333234636562393933333764346335323861
+          33653561613466616637633563653862363762333139393131363366666233313237383166306435
+          6231636461373163343435616266393931636164303930376332
+    monica_db_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          37313830336538373831643338346631646561313130366639653661653065613433363532623735
+          3534636630363162393661343534313835323535363161390a336163303365643933346162626338
+          35366133313462643663373733313732306363346539383730333333313734623533613366326362
+          3265643634346434370a333363373839356639333830396162663739343133336564653365633262
+          34373031663932633731383337666631663930376333623930666532386264626230633239333062
+          3130346361636431653230343639353833653737656264666663
+    monica_db_username: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          33626431316364633238376132306362616430616466386236636638316239373262353565636531
+          3839323537363364646239353533323635653165643365360a383563633565643730313163363139
+          36336338643766356234656364653566646363316561313165613237306365313639386165306630
+          3662313837373364300a376263666661313566636263336337386133306266363736313535663437
+          6235
+
+  tasks:
+    - name: Create a Podman volume for Monica data
+      podman_volume:
+        name: monica_data
+
+    - name: Create a Podman volume for MonicaDB data
+      podman_volume:
+        name: monicadb_data
+
+    - name: Create the pod
+      podman_pod:
+        name: monica
+        state: started
+        infra_image: quay.io/podman/stable
+        infra_command: "sleep infinity"  # keep the infra container running
+        publish:
+          - "10085:80"
+
+    - name: Create monica db container (rootless)
+      podman_container: 
+        pod: monica
+        name: monica-db
+        image: "docker.io/mysql:5.7"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        env:
+          MYSQL_RANDOM_ROOT_PASSWORD: "true"
+          MYSQL_DATABASE: "monica"
+          MYSQL_USER: "{{ monica_db_username }}"
+          MYSQL_PASSWORD: "{{ monica_db_password }}"
+        volumes:
+          - "monicadb_data:/var/lib/mysql:Z"
+
+    - name: Create Monica Podman container (rootless)
+      podman_container:
+        pod: monica
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        env:
+          APP_KEY: "{{ monica_app_key }}"
+          DB_HOST: "monica-db"
+          DB_USERNAME: "{{ monica_db_username }}"
+          DB_PASSWORD: "{{ monica_db_password }}"
+          APP_TRUSTED_PROXIES: "*"
+          APP_ENV: "production"
+          APP_URL: "https://monica.reika.io/"
+        volumes:
+          - "monica_data:/var/www/html/storage:Z"
+
+    - name: Generate systemd unit file for monica pod
+      podman_generate_systemd:
+        name: "monica"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure Monica pod is started and enabled
+      systemd:
+        name: "pod-monica.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

@@ -1,0 +1,144 @@
+---
+- name: Deploy Photoprism Podman Pod
+  hosts: prod
+
+  collections:
+    - containers.podman
+
+  vars:
+    pod_name: photoprism
+    app_image: "docker.io/photoprism/photoprism:latest"
+    database_image: "docker.io/mariadb:11"
+    user: "reika"
+    user_group: "reika"
+    photoprism_db_username: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          30633936366262356138366362393536393330356466363337616431336338623438616163646336
+          3466313639343436336463363738336334636535376266350a333063353435636262643664646431
+          36643033663261326439326662663736623934323435333639323231323736643331616436343865
+          3233373061643365650a383831396462383933616636383636383534343066623765623130353761
+          6633
+    photoprism_db_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          36663261393562356630363538316431656562656235303431636566306566383365303730666162
+          3766663237303235666634383433643561333631346561360a396362343866663235393633373464
+          61623333313933336461633834386634633439653030616661363663616536383633623462663463
+          3763643930336365350a346638323463643931373461376164313766616230663165616233656631
+          35353033386664373435643936373364373834326465663432383361613935613437376437383637
+          3961333030646238356439303663613039626635643033333366
+    photoprism_app_username: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          65306463663235313263643762633264326432666233383133326138626661633264373165653430
+          3763623139333963646230323531383161643562383736630a613833306139616131393236643463
+          31626638636638623831616139313263643335353930633030633665613038663830383739656230
+          3630333536353439390a623766313563396238313266663563356631323466353539343135663965
+          3463
+    photoprism_app_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          63643962313665333563376337646331613336623537656339366466306437333761616131653262
+          3936353537623430613534666639626536363165366466650a663834386339323436366533366338
+          39353161353431316662616461633630653464633132623661356537643530353137343865316630
+          6163613864363934390a646565343439313534353265353432653062643031623834356561346338
+          38393361343035313664343931393038343238656364623366303139333037363435393366353464
+          3166616463316338323431373330376239333235333236383661
+
+  tasks:
+    - name: Create a Podman volume for Photoprism MariaDB
+      podman_volume:
+        name: photoprism_db
+
+    - name: Pull Photoprism image
+      podman_image:
+        name: "{{ app_image }}"
+
+    - name: Pull MariaDB image
+      podman_image:
+        name: "{{ database_image }}"
+
+    - name: Create Photoprism Pod
+      podman_pod:
+        name: "{{ pod_name }}"
+        state: started
+        infra_image: quay.io/podman/stable
+        infra_command: "sleep infinity"  # keep the infra container running
+        publish:
+          - "18004:2342/tcp"
+
+    - name: Create MariaDB container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "photoprism-db"
+        image: "{{ database_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          MARIADB_AUTO_UPGRADE: "1"
+          MARIADB_INITDB_SKIP_TZINFO: "1"
+          MARIADB_DATABASE: "photoprism"
+          MARIADB_USER: "{{ photoprism_db_username }}"
+          MARIADB_PASSWORD: "{{ photoprism_db_password }}"
+          MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+        volumes:
+          - "photoprism_db:/var/lib/mysql:Z"
+
+    - name: Create Photoprism container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "photoprism-app"
+        image: "{{ app_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          PHOTOPRISM_ADMIN_USER: "{{ photoprism_app_username }}"
+          PHOTOPRISM_ADMIN_PASSWORD: "{{ photoprism_app_password }}"
+          PHOTOPRISM_AUTH_MODE: "password"
+          PHOTOPRISM_SITE_URL: "https://photoprism.reika.io/"
+          PHOTOPRISM_DISABLE_TLS: "false"
+          PHOTOPRISM_DEFAULT_TLS: "true"
+          PHOTOPRISM_ORIGINALS_LIMIT: "5000"
+          PHOTOPRISM_HTTP_COMPRESSION: "none"
+          PHOTOPRISM_LOG_LEVEL: "info"
+          PHOTOPRISM_READONLY: "false"
+          PHOTOPRISM_EXPERIMENTAL: "false"
+          PHOTOPRISM_DISABLE_CHOWN: "false"
+          PHOTOPRISM_DISABLE_WEBDAV: "false"
+          PHOTOPRISM_DISABLE_SETTINGS: "false"
+          PHOTOPRISM_DISABLE_TENSORFLOW: "false"
+          PHOTOPRISM_DISABLE_FACES: "false"
+          PHOTOPRISM_DISABLE_CLASSIFICATION: "false"
+          PHOTOPRISM_DISABLE_VECTORS: "false"
+          PHOTOPRISM_DISABLE_RAW: "false"
+          PHOTOPRISM_RAW_PRESETS: "false"
+          PHOTOPRISM_JPEG_QUALITY: "90"
+          PHOTOPRISM_DETECT_NSFW: "false"
+          PHOTOPRISM_UPLOAD_NSFW: "true"
+          PHOTOPRISM_DATABASE_DRIVER: "mysql"
+          PHOTOPRISM_DATABASE_SERVER: "photoprism-db:3306"
+          PHOTOPRISM_DATABASE_NAME: "photoprism"
+          PHOTOPRISM_DATABASE_USER: "{{ photoprism_db_username }}"
+          PHOTOPRISM_DATABASE_PASSWORD: "{{ photoprism_db_password }}"
+          PHOTOPRISM_SITE_CAPTION: "AI-Powered Photos App"
+          PHOTOPRISM_SITE_DESCRIPTION: "Reika PhotoPrism"
+          PHOTOPRISM_SITE_AUTHOR: "Reika PhotoPrism"
+        volumes:
+          - "/data/media/Photoprism:/photoprism:Z"
+
+    - name: Generate systemd unit file for photoprism pod
+      podman_generate_systemd:
+        name: "photoprism"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure photoprism pod is started and enabled
+      systemd:
+        name: "pod-photoprism.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

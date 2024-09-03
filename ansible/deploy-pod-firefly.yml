@@ -1,0 +1,170 @@
+---
+- name: Deploy Firefly III Podman Pod
+  hosts: prod  # Specify your target server(s)
+  collections:
+    - containers.podman
+
+  vars:
+    pod_name: firefly
+    firefly_image: "docker.io/fireflyiii/core:latest"
+    database_image: "docker.io/mariadb:lts"
+    user: "reika"
+    user_group: "reika"
+    firefly_db_user: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          35613966343765656534353166343533393234616632653232303562346662346539653864613433
+          3431323733303430363035356436316432356365333566380a356562373166353436303561333038
+          64666630393437333439316461343036366262323664393366363635643935363039396339376535
+          3162303736653861350a376539363065643037666337623732353839323363393533643663626563
+          3465
+    firefly_db_pass: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          32626637386332666334623131353166336332306366353830613437653538613035616430626134
+          3636393736353935656339646633316239303335373030360a306134393061396664346430316230
+          30316130306436616139656635623435393736366633353564626237666431336237626138666333
+          3966636163363132370a626336336431623465363833633265326261613566636233626530643533
+          61373839636534653637636539313265636131386135323434326664323131363063316262323339
+          3434663131633062376135356132343566326630343332396162
+    firefly_app_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          39336630633839353939663063636465333333663264663463636330363063373363663336653161
+          6430663063323165356437653634316365646433373936650a356531313239623830346365383632
+          65633538366439643461633262366137303137666334623664333232353061353539343066333730
+          3830363035306234330a643034636336356135393033373033616163303536386438653731336335
+          31613631363738666565316363656461663231396535663563613730343538633131306363356365
+          6639616363383062303866313736393333323863376332626361
+
+  tasks:
+    - name: Create a Podman volume for Firefly MySQL
+      podman_volume:
+        name: firefly_database
+
+    - name: Create a Podman volume for Firefly storage
+      podman_volume:
+        name: firefly_storage
+
+    - name: Pull Firefly III image
+      podman_image:
+        name: "{{ firefly_image }}"
+
+    - name: Pull MariaDB image
+      podman_image:
+        name: "{{ database_image }}"
+
+    - name: Create Firefly III Pod
+      podman_pod:
+        name: "{{ pod_name }}"
+        state: started
+        infra_image: quay.io/podman/stable
+        infra_command: "sleep infinity"  # keep the infra container running
+        publish:
+          - "58080:8080/tcp"
+
+    - name: Create MariaDB container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "firefly-db"
+        image: "{{ database_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: started
+        env:
+          MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+          MYSQL_DATABASE: "firefly"
+          MYSQL_USER: "{{ firefly_db_user }}"
+          MYSQL_PASSWORD: "{{ firefly_db_pass }}"  # Secure this too!
+        volumes:
+          - "firefly_database:/var/lib/mysql:Z"
+
+    - name: Create Firefly III container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "firefly-app"
+        image: "{{ firefly_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          #APP_ENV: "production"
+          #APP_DEBUG: "false"
+          #SITE_OWNER: "reikanger@gmail.com"
+          APP_KEY: "{{ firefly_app_key }}" # Use a secure key generation method
+          #DEFAULT_LANGUAGE: "en_US"
+          #DEFAULT_LOCALE: "equal"
+          #TZ: "America/Chicago"
+          TRUSTED_PROXIES: "*"
+          #LOG_CHANNEL: "stack"
+          #APP_LOG_LEVEL: "notice"
+          #AUDIT_LOG_LEVEL: "emergency"
+          DB_CONNECTION: "mysql"
+          DB_HOST: "firefly-db"
+          DB_PORT: "3306"
+          DB_DATABASE: "firefly"
+          DB_USERNAME: "{{ firefly_db_user }}"
+          DB_PASSWORD: "{{ firefly_db_pass }}"
+          #MYSQL_USE_SSL: "false"
+          #MYSQL_SSL_VERIFY_SERVER_CERT: "false"
+          #MYSQL_SSL_CAPATH: "/etc/ssl/certs/"
+          #PGSQL_SSL_MODE: "prefer"
+          #PGSQL_SCHEMA: "public"
+          #CACHE_DRIVER: "file"
+          #SESSION_DRIVER: "file"
+          #REDIS_SCHEME: "tcp"
+          #REDIS_HOST: "127.0.0.1"
+          #REDIS_PORT: "6379"
+          #REDIS_DB: "0"
+          #REDIS_CACHE_DB: "1"
+          #COOKIE_PATH: "/"
+          #COOKIE_SECURE: "false"
+          #COOKIE_SAMESITE: "lax"
+          #MAIL_MAILER: "log"
+          #MAIL_PORT: "2525"
+          #MAIL_FROM: "changeme@example.com"
+          #MAILGUN_ENDPOINT: "api.mailgun.net"
+          #SEND_ERROR_MESSAGE: "true"
+          #SEND_REPORT_JOURNALS: "true"
+          #ENABLE_EXTERNAL_MAP: "false"
+          #ENABLE_EXCHANGE_RATES: "false"
+          #ENABLE_EXTERNAL_RATES: "false"
+          #MAP_DEFAULT_LAT: "51.983333"
+          #MAP_DEFAULT_LONG: "5.916667"
+          #MAP_DEFAULT_ZOOM: "6"
+          #VALID_URL_PROTOCOLS: ""
+          #AUTHENTICATION_GUARD: "web"
+          #AUTHENTICATION_GUARD_HEADER: "REMOTE_USER"
+          #DISABLE_FRAME_HEADER: "false"
+          #DISABLE_CSP_HEADER: "false"
+          #ALLOW_WEBHOOKS: "false"
+          #DKR_BUILD_LOCALE: "false"
+          #DKR_CHECK_SQLITE: "true"
+          #DKR_RUN_MIGRATION: "true"
+          #DKR_RUN_UPGRADE: "true"
+          #DKR_RUN_VERIFY: "true"
+          #DKR_RUN_REPORT: "true"
+          #DKR_RUN_PASSPORT_INSTALL: "true"
+          #APP_NAME: "FireflyIII"
+          #BROADCAST_DRIVER: "log"
+          #QUEUE_DRIVER: "sync"
+          #CACHE_PREFIX: "firefly"
+          #FIREFLY_III_LAYOUT: "v1"
+          APP_URL: "https://firefly.reika.io"
+        volumes:
+          - "firefly_storage:/var/www/html/storage:Z"
+
+    - name: Generate systemd unit file for firefly pod
+      podman_generate_systemd:
+        name: "firefly"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure firefly pod is started and enabled
+      systemd:
+        name: "pod-firefly.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

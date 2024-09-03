@@ -1,0 +1,22 @@
+[global]
+workgroup = SAMBA
+server string = Home Samba Service
+security = user
+
+# (Optional) Logging configuration
+log file = /var/log/samba/log.%m
+max log size = 1000
+
+# (Optional) Additional global settings...
+
+{% for share in samba_shares %}
+[{{ share.name }}]
+   path = {{ share.path }}
+   guest ok = {{ share.guest_ok }}
+   read only = {{ share.read_only }}
+   browseable = {{ share.browseable }}
+   {% if share.valid_users %}
+   valid users = {{ share.valid_users | join(',') }}
+   {% endif %}
+{% endfor %}
+

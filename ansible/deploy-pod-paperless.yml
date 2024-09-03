@@ -1,0 +1,67 @@
+---
+- name: Create and manage Paperless-NGX Podman pod and containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "paperless-ngx"
+    container_image: "ghcr.io/paperless-ngx/paperless-ngx:latest"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create a Podman volume for Paperless data
+      podman_volume:
+        name: paperless_data
+
+    - name: Create the pod
+      podman_pod:
+        name: paperless
+        state: started
+        infra_image: quay.io/podman/stable
+        infra_command: "sleep infinity"  # keep the infra container running
+        publish:
+          - "18003:8000/tcp"
+
+    - name: Create paperless broker container (rootless)
+      podman_container: 
+        pod: paperless
+        name: paperless-broker
+        image: "docker.io/library/redis:7"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+
+    - name: Create paperless Podman container (rootless)
+      podman_container:
+        pod: paperless
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        env:
+          PAPERLESS_REDIS: "redis://paperless-broker:6379"
+          PAPERLESS_URL: "https://paperless.reika.io"
+        volumes:
+          - "paperless_data:/usr/src/paperless/data:Z"
+          - "/data/documents/Paperless:/usr/src/paperless/media:Z"
+
+    - name: Generate systemd unit file for paperless pod
+      podman_generate_systemd:
+        name: "paperless"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure paperless pod is started and enabled
+      systemd:
+        name: "pod-paperless.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

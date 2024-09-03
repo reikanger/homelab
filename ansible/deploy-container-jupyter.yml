@@ -1,0 +1,66 @@
+---
+- name: Create and manage Podman containers
+  hosts: prod
+  become: yes
+
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "jupyter"
+    container_image: "docker.io/cschranz/gpu-jupyter:v1.7_cuda-12.2_ubuntu-22.04" # GPU enabled Jupyterlab image
+    jupyter_token: !vault |
+      $ANSIBLE_VAULT;1.1;AES256
+      38386437396634336537633433363735346135346238343933356635376232393135363866613535
+      3833306561306566386666343032636630306238376332310a626133666338393862616530356635
+      30383433383634343837643533363762616561636537326463633232646365303035643839643837
+      3630623462623333390a323361383935363664376464643165643131336462666535623039386534
+      61616466333665323438343535333165313535646161363331326134303564313737323137383663
+      65343362303635336565363531363430303561386232306334353964613939623139346636666264
+      623266633239343466346163643436363863
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Ensure nvidia-container-toolkit is installed
+      dnf:
+        name: nvidia-container-toolkit
+        state: present
+
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        user: "1000:1000"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        security_opt:
+          - label=disable
+        device: "nvidia.com/gpu=all"
+        env:
+          GRANT_SUDO: 'yes'
+          JUPYTER_ENABLE_LAB: 'yes'
+          NB_UID: "1000"
+          NB_GID: "1000"
+          JUPYTER_TOKEN: "{{ jupyter_token }}"
+        ports:
+          - "13888:8888/tcp"
+        volumes:
+          - "/data/documents/Development:/home/jovyan/work:z"
+
+    - name: Generate systemd unit file for container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: /etc/systemd/system
+
+    - name: Ensure container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        daemon_reload: true
+        state: started
+        enabled: true
+

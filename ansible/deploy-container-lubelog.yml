@@ -1,0 +1,56 @@
+---
+- name: Create and manage metube Podman containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "lubelog"
+    container_image: "ghcr.io/hargata/lubelogger:latest"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create a Podman volume for lubelog data
+      podman_volume:
+        name: lubelog_data
+
+    - name: Create a Podman volume for lubelog keys
+      podman_volume:
+        name: lubelog_keys
+
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        env:
+          MailConfig__EmailServer: ""
+          MailConfig__EmailFrom: ""
+          MailConfig__UseSSL: "false"
+          MailConfig__Port: "587"
+          MailConfig__Username: ""
+          MailConfig__Password: ""
+        ports:
+          - "18089:8080"
+        volumes:
+          - "lubelog_data:/App:Z"
+          - "lubelog_keys:/root/.aspnet/DataProtection-Keys:Z"
+
+    - name: Generate systemd unit file for lubelog container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure lubelog container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true

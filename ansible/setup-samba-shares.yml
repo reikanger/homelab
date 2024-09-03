@@ -1,0 +1,66 @@
+---
+- name: Configure Samba Service and File Shares
+  hosts: prod  # Define the group of Samba servers in your inventory
+  become: yes 
+
+  vars:
+    samba_shares:  # Define your file shares here (adjust to your needs)
+      - name: shared
+        path: /data/shared
+        guest_ok: yes
+        read_only: no
+        browseable: yes
+        valid_users:
+          - reika
+
+  tasks:
+    - name: Install Samba packages
+      dnf:
+        name: samba,samba-common,samba-client
+        state: present
+
+    - name: Ensure Samba configuration directory exists
+      file:
+        path: /etc/samba
+        state: directory
+
+    - name: Copy Samba configuration file
+      template:
+        src: smb.conf.j2
+        dest: /etc/samba/smb.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart Samba
+
+    - name: Create Samba share directories
+      file:
+        path: "{{ item.path }}"
+        state: directory
+      loop: "{{ samba_shares }}"
+
+    - name: Set permissions on Samba share directories
+      file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: '0755'
+      loop: "{{ samba_shares }}"
+      
+    - name: Set SELinux context for Samba share directories
+      community.general.sefcontext:
+        target: "{{ item.path }}"
+        setype: samba_share_t
+        state: present
+      loop: "{{ samba_shares }}"
+
+    - name: Apply new SELinux context
+      ansible.builtin.command: restorecon -irv {{ item.path }}
+      loop: "{{ samba_shares }}"
+
+  handlers:
+    - name: Restart Samba
+      systemd:
+        name: smb
+        state: restarted
+

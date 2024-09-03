@@ -1,0 +1,121 @@
+---
+- name: Deploy Pinepods Podman Pod
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    pod_name: podcasts
+    app_image: "docker.io/madeofpendletonwool/pinepods:latest"
+    database_image: "docker.io/mariadb:latest"
+    user: "reika"
+    user_group: "reika"
+    pinepods_app_username: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          65646538316236366238336563623764663566356237323231633533353164653632366466366466
+          3633613962666637373933613665646661393166383463640a313339393366393866613637396437
+          37656538376631316261326436373361366131356432393633393030313239356133373464353462
+          6562393436643234310a623832383735333338376463303863633765653932363536656439373631
+          6365
+    pinepods_app_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          61353466326537653066303538613062336465623365633464653138623262383336303536366238
+          3836613738376638393334306463373832363139333930610a343562306563373231353061313361
+          36373662363136353230383461616134613133316461353736303638633038346635326562613264
+          3334643430653334390a666538333738633632366233383564613330343832343431636339326436
+          62363465353965346539343263653566373236666632366235323666313761333866643765643036
+          3432646465323763336635303264363662306530623639393363
+    pinepods_db_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          32626536616262626630343763636539316361393037356262386163623235633466323738356661
+          3537653864633435323765313364306662663366663433370a643366353162656362326431656465
+          66356232393530363563613131383062663862623562353134653830663166323831376164643639
+          6565356335363538370a643935323539663631623236326237643762346266323735303639336565
+          35636336646361383632306132626331306366396239356330323862313666646335663736323330
+          6536653361383734313635393137376466333162616133316534
+
+  tasks:
+    - name: Create a Podman volume for Pinepods MariaDB
+      podman_volume:
+        name: pinepods_db
+
+    - name: Pull Pinepods image
+      podman_image:
+        name: "{{ app_image }}"
+
+    - name: Pull MariaDB image
+      podman_image:
+        name: "{{ database_image }}"
+
+    - name: Create Pinepods Pod
+      podman_pod:
+        name: "{{ pod_name }}"
+        state: started
+        infra_image: quay.io/podman/stable
+        infra_command: "sleep infinity"  # keep the infra container running
+        publish:
+          - "18040:8040/tcp"
+
+    - name: Create MariaDB container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "pinepods-db"
+        image: "{{ database_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          MYSQL_TCP_PORT: 3306
+          MYSQL_ROOT_PASSWORD: '{{ pinepods_db_password }}'
+          MYSQL_DATABASE: pypods_database
+          MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+          MYSQL_CHARACTER_SET_SERVER: utf8mb4
+          MYSQL_INIT_CONNECT: 'SET @@GLOBAL.max_allowed_packet=64*1024*1024;'
+        volumes:
+          - "pinepods_db:/var/lib/mysql:Z"
+
+    - name: Create Photoprism container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "pinepods-app"
+        image: "{{ app_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          # Basic Server Info
+          SEARCH_API_URL: 'https://search.pinepods.online/api/search'
+          # Default Admin User Information
+          USERNAME: "{{ pinepods_app_username }}"
+          PASSWORD: "{{ pinepods_app_password }}"
+          FULLNAME: Ryan Eikanger
+          EMAIL: reikanger@gmail.com
+          # Database Vars
+          DB_TYPE: mariadb
+          DB_HOST: pinepods-db
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: "{{ pinepods_db_password }}"
+          DB_NAME: pypods_database
+          # Enable or Disable Debug Mode for additional Printing
+          DEBUG_MODE: False
+        volumes:
+          - "/data/media/Podcasts:/opt/pinepods:Z"
+
+    - name: Generate systemd unit file for pinepods pod
+      podman_generate_systemd:
+        name: "{{ pod_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure photoprism pod is started and enabled
+      systemd:
+        name: "pod-podcasts.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

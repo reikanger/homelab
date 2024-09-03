@@ -1,0 +1,54 @@
+---
+- name: Create and manage Podman containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "pyspark"
+    container_image: "quay.io/jupyter/pyspark-notebook:latest"
+    user: "reika"
+    user_group: "reika"
+    jupyter_token: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          32613862393631633732326431643131316436663633326263376237626365303063396266306437
+          3464363532633661346339363962373962623934303637630a373730356539616236333364663465
+          66343938623433393030376434323666333930633634616434316364373031333633366437343338
+          6162386664623962650a356230373164373631373965643036343366323433363034393930356635
+          33303065646566323862363038633334336665643066336263376336643232626532303862663165
+          6261363832323834633536643434353336383835313438323637
+
+  tasks:
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        user: "1000:1000"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        command: ["start-notebook.py", "--NotebookApp.token='{{ jupyter_token }}'", "--ip=0.0.0.0", "--port=8888"]
+        env:
+          NB_UID: "1000"
+          NB_GID: "1000"
+        ports:
+          - "14888:8888/tcp"
+        volumes:
+          - "/data/documents/Development:/home/jovyan/work:z,rw"
+
+    - name: Generate systemd unit file for container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

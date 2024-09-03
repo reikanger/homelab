@@ -1,0 +1,13 @@
+[Unit]
+Description=Podman Container for {{ container_name }}
+Requires=podman.socket
+After=podman.socket
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/podman run --name {{ container_name }} -d {{ container_image }}
+ExecStop=/usr/bin/podman stop -t 10 {{ container_name }}
+
+[Install]
+WantedBy=default.target
+

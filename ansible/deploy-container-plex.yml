@@ -1,0 +1,75 @@
+---
+- name: Create and manage plex Podman containers
+  hosts: prod
+  become: yes
+
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "plex"
+    container_image: "docker.io/plexinc/pms-docker:latest"
+    user: "reika"
+    user_group: "reika"
+    plex_claim: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          35353762626261373231633530666437636564366261333764323734646236313535353731386365
+          6232323930336632366264656230653335363331633361610a353064646233306339633563633134
+          38666234323032316464396163303663653461643963666266643561376237333231663765663037
+          3139336631653635300a366331383636653164333639383236323139353231313165343932653364
+          66643966646130376433326231303664326562333939313238393432656330303931
+
+  tasks:
+    - name: Create a Podman volume for plex config
+      podman_volume:
+        name: plex_config
+
+    - name: Create a Podman volume for plex transcoding
+      podman_volume:
+        name: plex_transcode
+
+    - name: Create plex Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        device: "nvidia.com/gpu=all"
+        security_opt:
+          - label=disable
+        env:
+          TZ: "America/Chicago"
+          PLEX_CLAIM: "{{ plex_claim }}"
+          ADVERTISE_IP: "http://192.168.1.5:32400/"
+          NVIDIA_VISIBLE_DEVICES: "all"
+          NVIDIA_DRIVER_CAPABILITIES: "all"
+        ports:
+          - "32400:32400"
+        volumes:
+          - "plex_config:/config:Z" 
+          - "plex_transcode:/transcode:Z"
+          - "/data/media/Anime:/data/media/Anime:z,ro"
+          - "/data/media/Comedy:/data/media/Comedy:z,ro"
+          - "/data/media/Documentaries:/data/media/Documentaries:z,ro"
+          - "/data/media/Movies:/data/media/Movies:z,ro"
+          - "/data/media/Music:/data/media/Music:z,ro"
+          - "/data/media/Sports:/data/media/Sports:z,ro"
+          - "/data/media/TV:/data/media/TV:z,ro"
+          - "/data/media/Videos:/data/media/Videos:z,ro"
+
+    - name: Generate systemd unit file for plex container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: /etc/systemd/system
+
+    - name: Ensure plex container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        daemon_reload: true
+        state: started
+        enabled: true
+

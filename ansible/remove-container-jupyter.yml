@@ -1,0 +1,33 @@
+---
+- name: Remove Podman container and its systemd service
+  hosts: prod  # Replace with your target server(s)
+
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: jupyterlab  # Replace with the actual container name
+    systemd_service_name: container-{{ container_name }}.service
+
+  tasks:
+    - name: Stop and disable systemd service (if it exists)
+      systemd:
+        scope: user
+        name: "{{ systemd_service_name }}"
+        state: stopped
+        enabled: no
+
+    - name: Remove systemd service file (if it exists)
+      file:
+        path: /home/reika/.config/systemd/user/{{ systemd_service_name }}
+        state: absent
+
+    - name: Stop and remove the Podman container
+      podman_container:
+        name: "{{ container_name }}"
+        state: absent
+
+    - name: Reload systemd
+      systemd:
+        scope: user
+        daemon_reload: true

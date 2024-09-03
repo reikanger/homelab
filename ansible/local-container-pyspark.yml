@@ -1,0 +1,27 @@
+---
+- name: Create and manage Podman containers
+  hosts: dev
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "pyspark"
+    container_image: "quay.io/jupyter/pyspark-notebook:latest"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        user: "1000:1000"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        command: ["start-notebook.py", "--NotebookApp.token=''", "--ip=0.0.0.0", "--port=8888"]
+        ports:
+          - "14888:8888/tcp"
+        volumes:
+          - "/home/reika/bootcamp:/home/jovyan/work:z,rw"

@@ -1,0 +1,52 @@
+---
+- name: Create and manage Podman containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "audiobooks"
+    container_image: "ghcr.io/advplyr/audiobookshelf:latest"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create a Podman volume for config
+      podman_volume:
+        name: audiobooks_config
+
+    - name: Create a Podman volume for metadata
+      podman_volume:
+        name: audiobooks_metadata
+
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        ports:
+          - "10081:80/tcp"
+        volumes:
+          - "audiobooks_config:/config:Z"
+          - "audiobooks_metadata:/metadata:Z"
+          - "/data/media/Audiobooks:/data/media/Audiobooks:z,ro"
+          - "/data/media/Podcasts:/data/media/Podcasts:z"
+
+    - name: Generate systemd unit file for container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

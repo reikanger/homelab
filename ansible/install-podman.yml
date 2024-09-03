@@ -1,0 +1,9 @@
+---
+- hosts: vps
+  become: yes
+
+  tasks:
+  - name: installing podman
+    package:
+      name: "podman"
+      state: present

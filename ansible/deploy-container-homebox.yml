@@ -1,0 +1,49 @@
+---
+- name: Create and manage Podman containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "homebox"
+    container_image: "ghcr.io/sysadminsmedia/homebox:latest-rootless"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create a Podman volume for Homebox data
+      podman_volume:
+        name: homebox_data
+
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: started
+        restart_policy: unless-stopped
+        env:
+          HBOX_LOG_LEVEL: info
+          HBOX_LOG_FORMAT: text
+          HBOX_WEB_MAX_UPLOAD_SIZE: 10
+        ports:
+          - "7745:7745/tcp"
+        volumes:
+          - "homebox_data:/data:Z"
+
+    - name: Generate systemd unit file for container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+

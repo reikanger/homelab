@@ -1,0 +1,40 @@
+---
+- name: Create and manage metube Podman containers
+  hosts: prod
+  collections:
+    - containers.podman
+
+  vars:
+    container_name: "metube"
+    container_image: "ghcr.io/alexta69/metube"
+    user: "reika"
+    user_group: "reika"
+
+  tasks:
+    - name: Create Podman container (rootless)
+      podman_container:
+        name: "{{ container_name }}"
+        image: "{{ container_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        state: created
+        restart_policy: unless-stopped
+        ports:
+          - "28081:8081"
+        volumes:
+          - "/data/incoming/metube:/downloads:z,rw"
+
+    - name: Generate systemd unit file for metube container
+      podman_generate_systemd:
+        name: "{{ container_name }}"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure metube container is started and enabled
+      systemd:
+        name: "container-{{ container_name }}.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
