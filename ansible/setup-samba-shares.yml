@@ -58,6 +58,12 @@
       ansible.builtin.command: restorecon -irv {{ item.path }}
       loop: "{{ samba_shares }}"
 
+    - name: Enable samba_export_all_rw SELinux boolean persistently
+      seboolean:
+        name: samba_export_all_rw
+        state: true
+        persistent: yes
+
     - name: Restart Samba services
       systemd:
         name: "{{ item }}"
