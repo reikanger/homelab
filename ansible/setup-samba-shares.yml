@@ -59,8 +59,11 @@
       loop: "{{ samba_shares }}"
 
   handlers:
-    - name: Restart Samba
+    - name: Restart Samba services
       systemd:
-        name: smb
+        name: "{{ item }}"
         state: restarted
+      loop:
+        - smb
+        - nmb
 
