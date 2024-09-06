@@ -1,0 +1,128 @@
+---
+- name: Deploy Docmost Podman Pod
+  hosts: prod
+
+  collections:
+    - containers.podman
+
+  vars:
+    pod_name: docmost
+    app_image: "docker.io/docmost/docmost:latest"
+    broker_image: "docker.io/redis:7.2-alpine"
+    database_image: "docker.io/postgres:16-alpine"
+    user: "reika"
+    user_group: "reika"
+    docmost_db_username: !vault |
+        $ANSIBLE_VAULT;1.1;AES256
+        64626430383366663665643837373832643831653463353937613136626163356464366635643735
+        6363396264353231333963383635623365303235393836370a336263646139356236383236363830
+        34366639616466323234333835326636346435393637373464333630623165616438623637316639
+        3735313561393133630a383365633539303864306230346366613236393164363261323539393161
+        6538
+    docmost_db_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          35356666633537643565333735643264613030383738636561306533666266653830353766353636
+          3161663633666465353363613165656462393630316538360a383531646430356364653430313432
+          37373531636639386566613532323938623330613334636265316230613032396432653262363961
+          3532326235316365390a663534613339656137633731613361336462303861623931336563613461
+          66393730373765656661663130346166363535666530366363383934613937666261363165663433
+          3039316133643839303266303536333735383462333264613932
+    docmost_app_secret: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          31633739363264646330373438643563653235653066633963653166356331366438313739623938
+          3834323834343262333835336562373630346535663762620a373364363965633833383564316630
+          37666331613834323934346439643566356262636262336530376439636362633530386162616463
+          3532323138306564340a363162376432356231393939623063336165356631666331316330356131
+          36303936346665366232666335363331313461656134353534626331653061393261623166336164
+          3335383339336637356361303633363531336538363765643238
+
+  tasks:
+    - name: Create a Podman volume for Docmost MariaDB
+      podman_volume:
+        name: docmost_db_data
+
+    - name: Create a Podman volume for Docmost MariaDB
+      podman_volume:
+        name: docmost_broker_data
+
+    - name: Create a Podman volume for Docmost data
+      podman_volume:
+        name: docmost_app_data
+
+    - name: Pull Docmost image
+      podman_image:
+        name: "{{ app_image }}"
+
+    - name: Pull MariaDB image
+      podman_image:
+        name: "{{ database_image }}"
+
+    - name: Create Docmost Pod
+      podman_pod:
+        name: "{{ pod_name }}"
+        state: started
+        infra_image: quay.io/podman/stable
+        infra_command: "sleep infinity"  # keep the infra container running
+        publish:
+          - "18006:3000/tcp"
+
+    - name: Create MariaDB container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "docmost-db"
+        image: "{{ database_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          POSTGRES_DB: docmost
+          POSTGRES_USER: "{{ docmost_db_username }}"
+          POSTGRES_PASSWORD: "{{ docmost_db_password }}"
+        volumes:
+          - "docmost_db_data:/var/lib/postgresql/data:Z"
+
+    - name: Create Docmost broker container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "docmost-broker"
+        image: "{{ broker_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        volumes:
+          - "docmost_broker_data:/data:Z"
+
+    - name: Create Docmost container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "docmost-app"
+        image: "{{ app_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          APP_URL: "https://docmost.reika.io"
+          APP_SECRET: "{{ docmost_app_secret }}"
+          DATABASE_URL: "postgresql://{{ docmost_db_username }}:{{ docmost_db_password }}@docmost-db:5432/docmost?schema=public"
+          REDIS_URL: "redis://docmost-broker:6379"
+        volumes:
+          - "docmost_app_data:/app/data/storage:Z"
+
+    - name: Generate systemd unit file for docmost pod
+      podman_generate_systemd:
+        name: "docmost"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure docmost pod is started and enabled
+      systemd:
+        name: "pod-docmost.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+
