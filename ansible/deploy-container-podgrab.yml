@@ -29,7 +29,7 @@
           - "18083:8080/tcp"
         volumes:
           - "podgrab_config:/config:Z"
-          - "/data/incoming/podgrab:/assets:z,rw"
+          - "/data/incoming/podgrab:/assets:z"
 
     - name: Generate systemd unit file for container
       podman_generate_systemd:
