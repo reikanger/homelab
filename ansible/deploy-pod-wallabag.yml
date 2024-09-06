@@ -1,0 +1,123 @@
+---
+- name: Deploy Wallabag Podman Pod
+  hosts: prod
+
+  collections:
+    - containers.podman
+
+  vars:
+    pod_name: wallabag
+    app_image: "docker.io/wallabag/wallabag:latest"
+    broker_image: "docker.io/redis:alpine"
+    database_image: "docker.io/mariadb:latest"
+    user: "reika"
+    user_group: "reika"
+    wallabag_db_root_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          66356430383365663830666261373766393938616133633037353337373735376232333063386132
+          3063343335343562306438306637336136333763646363390a613162646336626464336634666266
+          39613865356264326634326638343236366337376633616133313837646264353461653539316131
+          3263333638313736610a333238663936376561396133353366316430353665383763306338613864
+          38393735386132653631383165656330386131303863653039353336336632393236393464376363
+          3833346661623036343865333163336131306431363564373961
+    wallabag_db_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          34366334323661636235623761383235313234653138653938323633656132636133343931386438
+          6265636232393539336635343365303631376138356562360a656633636232633763333165656337
+          39373562343534653835313566613663383665363862376166396262646562336637313931656635
+          6536346263633462620a653839313836303730336532666635376435643130306535643031326462
+          37316463636165333034313436643831323834656237313062333664383239363866313033643330
+          6235613031646262663132353831336134343034623338346630
+
+  tasks:
+    - name: Create a Podman volume for Wallabag MariaDB
+      podman_volume:
+        name: walladb_data
+
+    - name: Create a Podman volume for Wallabag images
+      podman_volume:
+        name: walla_images
+
+    - name: Pull Wallabag App image
+      podman_image:
+        name: "{{ app_image }}"
+
+    - name: Pull Wallabag Broker image
+      podman_image:
+        name: "{{ broker_image }}"
+
+    - name: Pull MariaDB image
+      podman_image:
+        name: "{{ database_image }}"
+
+    - name: Create Wallabag Pod
+      podman_pod:
+        name: "{{ pod_name }}"
+        state: started
+        infra_image: quay.io/podman/stable
+        infra_command: "sleep infinity"  # keep the infra container running
+        publish:
+          - "19013:80/tcp"
+
+    - name: Create DB container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "wallabag-db"
+        image: "{{ database_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          MYSQL_ROOT_PASSWORD: "{{ wallabag_db_root_password }}"
+        volumes:
+          - "walladb_data:/var/lib/mysql:Z"
+
+    - name: Create Broker container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "wallabag-broker"
+        image: "{{ broker_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+
+    - name: Create Wallabag App container within the pod
+      podman_container:
+        pod: "{{ pod_name }}"
+        name: "wallabag-app"
+        image: "{{ app_image }}"
+        labels:
+          io.containers.autoupdate: registry
+        restart_policy: unless-stopped
+        state: created
+        env:
+          MYSQL_ROOT_PASSWORD: "{{ wallabag_db_root_password }}"
+          SYMFONY__ENV__DATABASE_DRIVER: "pdo_mysql"
+          SYMFONY__ENV__DATABASE_HOST: "wallabag-db"
+          SYMFONY__ENV__DATABASE_PORT: "3306"
+          SYMFONY__ENV__DATABASE_NAME: "wallabag"
+          SYMFONY__ENV__DATABASE_USER: "wallabag"
+          SYMFONY__ENV__DATABASE_PASSWORD: "{{ wallabag_db_password }}"
+          SYMFONY__ENV__DATABASE_CHARSET: "utf8mb4"
+          SYMFONY__ENV__DATABASE_TABLE_PREFIX: "wallabag_"
+          SYMFONY__ENV__DOMAIN_NAME: "https://wallabag.reika.io"
+        volumes:
+          - "walla_images:/var/www/wallabag/web/assets/images:Z"
+
+    - name: Generate systemd unit file for Wallabag pod
+      podman_generate_systemd:
+        name: "wallabag"
+        new: true
+        no_header: true
+        dest: "/home/{{ user }}/.config/systemd/user/"
+
+    - name: Ensure Wallabag pod is started and enabled
+      systemd:
+        name: "pod-wallabag.service"
+        scope: user
+        daemon_reload: true
+        state: started
+        enabled: true
+
